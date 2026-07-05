@@ -4,7 +4,7 @@
 // @version      2.4.1
 // @description  Filter + status markers for Facebook Marketplace listings
 // @author       local
-// @match        https://www.facebook.com/marketplace/*
+// @match        https://www.facebook.com/*
 // @grant        GM_getValue
 // @grant        GM_setValue
 // @grant        GM_deleteValue
@@ -257,7 +257,7 @@
     const style = document.createElement('style');
     style.id = 'fmp-style';
     style.textContent =
-      'a[href*="/marketplace/item/"][data-fmp-bad]{opacity:0.4;transition:opacity 0.2s}\n' +
+      'a[href*="/marketplace/item/"][data-fmp-bad]{opacity:0.25;transition:opacity 0.2s}\n' +
       'a[href*="/marketplace/item/"][data-fmp-bad]:hover{opacity:1}';
     document.head.appendChild(style);
   }
@@ -512,11 +512,13 @@
     const label = document.createElement('span');
     label.innerHTML =
       '<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" ' +
-      'fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" ' +
-      'style="vertical-align:-1px">' +
+      'fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">' +
       '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>' +
-      '</svg> Фильтр объявлений';
+      '</svg><span>Фильтр объявлений</span>';
     Object.assign(label.style, {
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: '5px',
       color: '#e0e0e0',
       fontSize: '12px',
       fontWeight: '600',
@@ -526,6 +528,9 @@
     const toggleBtn = document.createElement('button');
     toggleBtn.textContent = '–';
     Object.assign(toggleBtn.style, {
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
       background: 'none',
       border: 'none',
       color: '#aaa',
@@ -826,7 +831,22 @@
   // ── Init ─────────────────────────────────────────────────────────────────────
 
   function init() {
-    if (document.getElementById('fmp-filter-box')) return;
+    const existing = document.getElementById('fmp-filter-box');
+
+    // @match now covers all of facebook.com (SPA navigations into
+    // Marketplace don't trigger a fresh script injection), so gate the
+    // actual UI on the current path instead of the match pattern.
+    if (!location.pathname.startsWith('/marketplace/')) {
+      if (existing) existing.style.display = 'none';
+      return;
+    }
+
+    if (existing) {
+      existing.style.display = 'flex';
+      applyOverlays();
+      return;
+    }
+
     injectStyle();
     const { counter } = createUI();
     applyOverlays();
@@ -839,11 +859,17 @@
     init();
   }
 
-  // Re-init after FB SPA navigation
-  const _pushState = history.pushState.bind(history);
-  history.pushState = function (...args) {
-    _pushState(...args);
-    setTimeout(init, 800);
-  };
-  window.addEventListener('popstate', () => setTimeout(init, 800));
+  // Re-init after FB SPA navigation.
+  // Hooking history.pushState is unreliable here: this script runs at
+  // document-idle, by which point FB's own router (loaded much earlier)
+  // may have already cached a reference to the native pushState, so our
+  // override never gets called. Polling location.href works regardless
+  // of how FB implements its client-side routing.
+  let lastHref = location.href;
+  setInterval(() => {
+    if (location.href !== lastHref) {
+      lastHref = location.href;
+      setTimeout(init, 800);
+    }
+  }, 500);
 })();
